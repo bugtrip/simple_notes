@@ -46,10 +46,11 @@ bool Database::check_table_exists(const std::string& table_name){
 	if(check_step == SQLITE_ROW){
 		sqlite3_finalize(stmt);
 		return true;
+	} else {
+		//std::cerr << "check_table_exists: " << sqlite3_errmsg(db) << std::endl;
+		sqlite3_finalize(stmt);
 	}
-	//std::cerr << sqlite3_errmsg(db) << std::endl;
-	sqlite3_finalize(stmt);
-	
+
 	return false;
 }
 
@@ -80,4 +81,104 @@ bool Database::is_valid_table_name(const std::string& name){
 
 	return true;
 }
+
 int& Database::get_table_count(){ return table_count; }
+
+int Database::find_section_id(const std::string& section_name){
+	int id{0};
+	sqlite3_stmt* stmt{nullptr};
+	const std::string find_command{"select id from notes where name = ?1;"};
+
+	if(sqlite3_prepare_v2(db, find_command.c_str(), -1, &stmt, nullptr) != SQLITE_OK){
+		std::cerr << sqlite3_errmsg(db) << std::endl;
+		return -1;
+	}
+
+	if(sqlite3_bind_text(stmt, 1, section_name.c_str(), -1, SQLITE_TRANSIENT)){
+		std::cerr << sqlite3_errmsg(db) << std::endl;
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+	int check_step_id = sqlite3_step(stmt);
+	if(check_step_id == SQLITE_ROW){
+		id = sqlite3_column_int(stmt, 0);
+		sqlite3_finalize(stmt);
+		return id;
+	} else {
+		//std::cerr << "find_section_id: " << sqlite3_errmsg(db) << std::endl;
+		sqlite3_finalize(stmt);
+	}
+	return -1;
+}
+
+bool Database::find_section(const std::string& section_name){
+	if(section_name.size() > max_size_table_name){ return false; }
+	if(!is_valid_table_name(section_name)){ return false; }
+
+	sqlite3_stmt* stmt{nullptr};
+	const std::string find_command = std::format("select name from notes where name = ?1");
+	
+	if(sqlite3_prepare_v2(db, find_command.c_str(), -1, &stmt, nullptr) != SQLITE_OK){
+		std::cerr << sqlite3_errmsg(db) << std::endl;
+		
+		return false;
+	}
+
+	if(sqlite3_bind_text(stmt, 1, section_name.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK){
+		std::cerr << sqlite3_errmsg(db) << std::endl;
+		sqlite3_finalize(stmt);
+		
+		return false;
+	}
+
+	int check_step_find = sqlite3_step(stmt);
+	if(check_step_find == SQLITE_ROW){
+		sqlite3_finalize(stmt);
+		return true;
+	} else {
+		//std::cerr << "find_section: " <<  sqlite3_errmsg(db) << std::endl;
+		sqlite3_finalize(stmt);
+	}
+	
+	return false;
+}
+
+int Database::insert_note(const std::string& section_name, const std::string& title_note, const std::string& desc){
+	if(db != nullptr && find_section(section_name)){
+		int notes_id{0};
+		notes_id = find_section_id(section_name);
+		
+		if(notes_id <= 0){ return -1; }
+		
+		std::string insert_command = std::format("insert into {} (notes_id, title_note, description) values({}, ?3, ?4);", section_name, notes_id);
+		sqlite3_stmt* stmt{nullptr};
+		if(sqlite3_prepare_v2(db, insert_command.c_str(), -1, &stmt, nullptr)!= SQLITE_OK){
+			std::cerr << sqlite3_errmsg(db) << std::endl;
+			return -1;
+		}
+
+		if(sqlite3_bind_text(stmt, 3, title_note.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK){
+			std::cerr << sqlite3_errmsg(db) << std::endl;
+			sqlite3_finalize(stmt);
+			return -1;
+		}
+		if(sqlite3_bind_text(stmt, 4, desc.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK){
+			std::cerr << sqlite3_errmsg(db) << std::endl;
+			sqlite3_finalize(stmt);
+			return -1;
+		}
+
+		int check_step = sqlite3_step(stmt);
+		if(check_step == SQLITE_DONE){
+
+			sqlite3_finalize(stmt);
+			return 0;
+		} else {
+			//std::cerr << "insert_note: " << sqlite3_errmsg(db) << std::endl;
+			sqlite3_finalize(stmt);
+		}
+		return -1;
+	}
+	return -1;
+}
